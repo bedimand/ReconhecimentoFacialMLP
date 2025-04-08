@@ -6,13 +6,15 @@ class FaceMLP(nn.Module):
     """
     Multi-Layer Perceptron for facial recognition
     """
-    def __init__(self, input_size=92*112, num_classes=1):
+    def __init__(self, input_size=92*112, num_classes=1, dropout_rate=0.3):
         super(FaceMLP, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(input_size, 512),
             nn.ReLU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(512, 256),
             nn.ReLU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(256, num_classes)
         )
     

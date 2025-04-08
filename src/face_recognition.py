@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import time
 import os
+import matplotlib.pyplot as plt
 
 from src.model import load_model
 from src.face_detection import detect_faces, extract_face, is_looking_at_camera
@@ -57,7 +58,7 @@ def recognize_face(model, face_img, classes, device, transform=None):
 
 def evaluate_model(model, dataset_path, classes, device):
     """
-    Evaluate model on test images (last 3 from each class)
+    Evaluate model on test images (reserved from each class)
     
     Args:
         model: Face recognition model
@@ -69,6 +70,7 @@ def evaluate_model(model, dataset_path, classes, device):
         accuracy: Overall accuracy percentage
     """
     from src.training import FaceDataset
+    from sklearn.metrics import confusion_matrix, classification_report
     
     # Define transform
     transform = get_transform()
@@ -85,6 +87,10 @@ def evaluate_model(model, dataset_path, classes, device):
     class_correct = [0] * len(classes)
     class_total = [0] * len(classes)
     
+    # Store all predictions and true labels for confusion matrix
+    all_predictions = []
+    all_labels = []
+    
     # Model in evaluation mode
     model.eval()
     
@@ -96,6 +102,10 @@ def evaluate_model(model, dataset_path, classes, device):
             # Forward pass
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
+            
+            # Store for confusion matrix
+            all_predictions.append(predicted.item())
+            all_labels.append(labels.item())
             
             # Update statistics
             total += labels.size(0)
@@ -112,11 +122,53 @@ def evaluate_model(model, dataset_path, classes, device):
     
     # Display results
     print(f"\nOverall accuracy: {accuracy:.2f}% ({correct}/{total})")
+    
+    # Print classification report
+    try:
+        report = classification_report(all_labels, all_predictions, target_names=classes, zero_division=0)
+        print("\nDetailed Classification Report:")
+        print(report)
+    except ImportError:
+        print("\nPlease install scikit-learn for detailed classification report")
+    
+    # Print per-class accuracy (for platforms without sklearn)
     print("\nAccuracy by class:")
     for i in range(len(classes)):
         if class_total[i] > 0:
             class_acc = 100 * class_correct[i] / class_total[i]
             print(f"{classes[i]}: {class_acc:.2f}% ({class_correct[i]}/{class_total[i]})")
+    
+    # Plot confusion matrix if sklearn is available
+    try:
+        # Calculate confusion matrix
+        cm = confusion_matrix(all_labels, all_predictions, labels=range(len(classes)))
+        
+        # Plot confusion matrix
+        plt.figure(figsize=(10, 8))
+        plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+        plt.title('Confusion Matrix')
+        plt.colorbar()
+        tick_marks = np.arange(len(classes))
+        plt.xticks(tick_marks, classes, rotation=45, ha='right')
+        plt.yticks(tick_marks, classes)
+        
+        # Add text annotations to the matrix
+        thresh = cm.max() / 2
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                plt.text(j, i, format(cm[i, j], 'd'),
+                        ha="center", va="center",
+                        color="white" if cm[i, j] > thresh else "black")
+        
+        plt.tight_layout()
+        plt.ylabel('True Label')
+        plt.xlabel('Predicted Label')
+        
+        # Save the figure
+        plt.savefig('confusion_matrix.png')
+        print("Confusion matrix saved to confusion_matrix.png")
+    except ImportError:
+        print("Please install scikit-learn and matplotlib for confusion matrix visualization")
     
     return accuracy
 
@@ -162,14 +214,14 @@ def process_frame_for_recognition(frame, face, face_analyzer, model, classes,
         # Get predicted class and confidence
         predicted_label = classes[predicted_idx]
         
-        # Draw bounding box - green for high confidence, orange for low
-        color = (0, 255, 0) if confidence >= confidence_threshold else (0, 165, 255)
-        
-        # Display name and confidence
-        if confidence >= confidence_threshold:
-            label = f"{predicted_label}: {confidence:.1f}%"
+        # Check if the predicted label is from the 'unknown' folder or has low confidence
+        if predicted_label.startswith('unknown_') or confidence < confidence_threshold:
+            color = (0, 0, 255)  # Red for unknown
+            label = f"Desconhecido: {confidence:.1f}%"
         else:
-            label = f"Unknown: {confidence:.1f}%"
+            # Draw bounding box - green for high confidence
+            color = (0, 255, 0)
+            label = f"{predicted_label}: {confidence:.1f}%"
     else:
         # If not looking at camera, display message and use different color
         color = (0, 0, 255)  # Red for not looking

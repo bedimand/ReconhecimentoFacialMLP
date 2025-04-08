@@ -29,10 +29,13 @@ image_processing:
 
 # Training Configuration
 training:
-  num_epochs: 20
-  batch_size: 16
+  num_epochs: 40
+  batch_size: 32
   learning_rate: 0.001
-  test_images_per_class: 3  # Number of images to reserve for testing
+  learning_rate_scheduler: false
+  dropout_rate: 0.0
+  test_images_per_class: 1
+  use_augmentation: false
 
 # Recognition Settings
 recognition:
