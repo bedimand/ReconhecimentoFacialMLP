@@ -7,18 +7,23 @@ name = "face-recognition"
 version = "0.1.0"
 description = "Sistema de Reconhecimento Facial usando MLP"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Ana Beatriz, Ana Paula, Bernardo Rosa, Livia Rainho"}
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 dependencies = [
-    "torch>=1.7.0",
-    "torchvision>=0.8.0",
     "Pillow>=8.0.0",
-    "tqdm>=4.50.0",
-    "opencv-python>=4.5.0",
-    "numpy>=1.19.0",
+    "opencv-python-headless>=4.5.0",
+    "opencv-contrib-python>=4.5.0",
+    "numpy>=1.24.0,<2.0.0",
     "insightface>=0.7.0",
-    "onnxruntime>=1.8.0",
+    "onnxruntime-gpu>=1.8.0",
+    "pyyaml>=6.0"
+]
+
+[project.optional-dependencies]
+cuda = [
+    "torch @ https://download.pytorch.org/whl/cu118/torch-2.0.1%2Bcu118-cp311-cp311-win_amd64.whl",
+    "torchvision @ https://download.pytorch.org/whl/cu118/torchvision-0.15.2%2Bcu118-cp311-cp311-win_amd64.whl"
 ]
 
 [project.scripts]

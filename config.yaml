@@ -1,0 +1,75 @@
+# System Configuration
+system:
+  python_version: "3.11+"
+  device: "cpu"  # "cuda" or "cpu"
+
+# Directory Structure
+paths:
+  models_dir: "models/insightface"
+  dataset_dir: "dataset"
+  detected_faces_dir: "detected_faces"
+  model_save_path: "models/face_mlp.pth"
+
+# Face Detection Settings
+face_detection:
+  model_name: "buffalo_s"
+  allowed_modules: ["detection", "landmark_2d_106"]
+  det_size: [640, 640]
+  ctx_id: 0  # GPU device ID
+  margin: 20  # Margin around detected faces
+
+# Image Processing
+image_processing:
+  target_size: [92, 112]  # Width, Height
+  edge_enhancement:
+    alpha: 0.3  # Edge enhancement factor
+  normalization:
+    mean: [0.5]
+    std: [0.5]
+
+# Training Configuration
+training:
+  num_epochs: 20
+  batch_size: 16
+  learning_rate: 0.001
+  test_images_per_class: 3  # Number of images to reserve for testing
+
+# Recognition Settings
+recognition:
+  confidence_threshold: 80.0  # Minimum confidence for face recognition
+  looking_detection:
+    enabled: true
+    threshold: 0.75
+    horizontal_ratio_threshold: 0.15  # Maximum allowed horizontal deviation
+    vertical_deviation_threshold: 0.2  # Maximum allowed vertical deviation
+
+# Visualization
+visualization:
+  landmarks:
+    enabled: true
+    color: [0, 255, 255]  # BGR format
+  bounding_box:
+    high_confidence_color: [0, 255, 0]  # Green
+    low_confidence_color: [0, 165, 255]  # Orange
+    not_looking_color: [0, 0, 255]  # Red
+  text:
+    font: "FONT_HERSHEY_SIMPLEX"
+    scale: 0.7
+    thickness: 2
+    color: [0, 0, 255]  # BGR format
+
+# Camera Settings
+camera:
+  width: 1280
+  height: 720
+  fps: 30
+
+# Keyboard Controls
+controls:
+  quit: "q"
+  save_face: "s"
+  toggle_auto_save: "a"
+  toggle_landmarks: "l"
+  toggle_looking_detection: "c"
+  increase_threshold: "+"
+  decrease_threshold: "-"
