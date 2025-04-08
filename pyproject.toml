@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "face-recognition"
+version = "0.1.0"
+description = "Sistema de Reconhecimento Facial usando MLP"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+requires-python = ">=3.7"
+dependencies = [
+    "torch>=1.7.0",
+    "torchvision>=0.8.0",
+    "Pillow>=8.0.0",
+    "tqdm>=4.50.0",
+    "opencv-python>=4.5.0",
+    "numpy>=1.19.0",
+    "insightface>=0.7.0",
+    "onnxruntime>=1.8.0",
+]
+
+[project.scripts]
+train-face-model = "train_model:main"
+predict-face = "predictor:main"
+detect-faces = "face_detector:main"
+realtime-recognition = "real_time_recognition:main"
+download-models = "download_models:main"
+
+[tool.setuptools]
+py-modules = ["train_model", "predictor", "face_detector", "real_time_recognition", "download_models"]
