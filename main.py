@@ -3,14 +3,11 @@ import cv2
 import torch
 import numpy as np
 import time
-from PIL import Image
-import threading
-import queue
+import json
+from datetime import datetime
 
 from src.config import config
 from src.utils import (
-    check_requirements, 
-    get_device, 
     clear_console, 
     print_header,
     wait_key,
@@ -20,20 +17,23 @@ from src.utils import (
 from src.face_detection import (
     initialize_face_analyzer, 
     detect_faces, 
-    save_face
+    save_face,
+    extract_face
 )
-from src.face_recognition import (
-    recognize_face, 
-    evaluate_model,
-    process_frame_for_recognition
-)
+from src.frame_processor import process_frame_for_recognition
+from src.evaluation import evaluate_model, print_evaluation_results, plot_confusion_matrix
 from src.visualization import (
     draw_landmarks, 
-    draw_face_info, 
-    draw_stats
+    draw_stats, 
+    draw_five_landmarks, 
+    draw_nose_centered_crop, 
+    draw_crosshair_center,
+    draw_recognition_results
 )
-from src.training import train_model
+from src.train import train_model
+from src.preprocessing_dataset import preprocess_dataset
 from src.model import load_model
+from src.preprocessing import PreprocessModule
 
 # Get paths from config
 DATASET_PATH = config.get_dataset_dir()
@@ -72,6 +72,10 @@ def detect_and_collect_faces():
     else:
         person_dir = os.path.join(DATASET_PATH, "unknown")
         os.makedirs(person_dir, exist_ok=True)
+    
+    # Determine cleaned label name and start timestamp for this collection session
+    label_name = os.path.basename(person_dir)
+    collection_ts = datetime.now().strftime("%Y%m%d%H%M%S")
     
     print_header("Face Detection and Collection")
     print(f"Press '{config.get('controls.save_face')}' to save current face")
@@ -116,7 +120,7 @@ def detect_and_collect_faces():
             
             # Save face if auto-save is enabled
             if auto_save:
-                filename = save_face(frame, face, person_dir)
+                filename = save_face(frame, face, person_dir, label_name, collection_ts)
                 print(f"Face saved: {filename}")
                 face_count += 1
         
@@ -138,7 +142,7 @@ def detect_and_collect_faces():
         elif key == ord(config.get('controls.save_face')):
             # Save all current faces
             for face in faces:
-                filename = save_face(frame, face, person_dir)
+                filename = save_face(frame, face, person_dir, label_name, collection_ts)
                 print(f"Face saved: {filename}")
                 face_count += 1
         elif key == ord(config.get('controls.toggle_landmarks')):
@@ -159,26 +163,30 @@ def detect_and_collect_faces():
 # Function to train the recognition model
 def train_recognition_model():
     print_header("Train Face Recognition Model")
+    print("[LOG] Starting train_recognition_model")
     
-    # Check if dataset exists
+    print("[LOG] Checking if dataset exists at:", DATASET_PATH)
     if not os.path.exists(DATASET_PATH):
         print(f"Error: Dataset path {DATASET_PATH} not found!")
         wait_key()
         return
+    print("[LOG] Dataset directory found")
     
-    # Count images by person
+    print("[LOG] Counting images by person")
     person_counts = count_images_by_person(DATASET_PATH)
     
+    print(f"[LOG] Found {len(person_counts)} person(s) in dataset")
     if not person_counts:
         print("No person folders found in dataset!")
         wait_key()
         return
+    print("[LOG] person_counts:", person_counts)
     
     print("Available people in dataset:")
     for person, count in person_counts.items():
         print(f"- {person}: {count} images")
     
-    # Get training parameters from config
+    print("[LOG] Retrieving training parameters from config")
     num_epochs = config.get('training.num_epochs')
     batch_size = config.get('training.batch_size')
     learning_rate = config.get('training.learning_rate')
@@ -190,7 +198,7 @@ def train_recognition_model():
     
     print("\nStarting training...")
     
-    # Train the model
+    print(f"[LOG] Calling train_model with epochs={num_epochs}, batch_size={batch_size}, lr={learning_rate}")
     model, classes = train_model(
         DATASET_PATH, 
         MODEL_PATH, 
@@ -198,6 +206,7 @@ def train_recognition_model():
         batch_size=batch_size,
         learning_rate=learning_rate
     )
+    print("[LOG] train_model returned")
     
     if model is None:
         print("Training failed!")
@@ -230,15 +239,47 @@ def evaluate_recognition_model():
     
     print(f"Loaded model with {len(classes)} classes: {classes}")
     
-    # Evaluate model
-    accuracy = evaluate_model(model, DATASET_PATH, classes, device)
+    # Use preprocessed dataset if available, else raw
+    preprocessed_dir = DATASET_PATH.rstrip(os.sep) + '_preprocessed'
+    if os.path.exists(preprocessed_dir):
+        eval_dataset_path = preprocessed_dir
+        print(f"[LOG] Using preprocessed dataset at {preprocessed_dir} for evaluation")
+    else:
+        eval_dataset_path = DATASET_PATH
+        print(f"[LOG] Preprocessed dataset not found, evaluating on raw data at {DATASET_PATH}")
     
-    print(f"\nOverall accuracy: {accuracy:.2f}%")
+    # Load manifest to exclude training images
+    manifest = {}
+    manifest_path = os.path.join(eval_dataset_path, 'manifest.json')
+    if os.path.exists(manifest_path):
+        with open(manifest_path, 'r') as mf:
+            manifest = json.load(mf)
+        print("[LOG] Loaded manifest for evaluation, excluding training images")
+    else:
+        print(f"[LOG] No manifest found at {manifest_path}, evaluating on all images")
+    
+    # Evaluate model
+    accuracy, all_predictions, all_labels, class_accuracies = evaluate_model(model, eval_dataset_path, classes, device, manifest=manifest)
+    
+    # Print detailed results
+    print_evaluation_results(accuracy, classes, all_labels, all_predictions, class_accuracies)
+    
+    # Generate confusion matrix visualization
+    plot_confusion_matrix(classes, all_labels, all_predictions)
+    
     wait_key()
 
 # Function for real-time face recognition
 def real_time_recognition(model=None, classes=None):
     print_header("Real-time Face Recognition")
+    
+    # Set fixed random seed for reproducibility
+    seed = config.get('training.seed', 42)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    print(f"Set random seed to {seed} for reproducible results")
     
     # Get device from config
     device = config.get_device()
@@ -282,8 +323,8 @@ def real_time_recognition(model=None, classes=None):
     print("Real-time face recognition started.")
     print(f"Press '{config.get('controls.toggle_landmarks')}' to toggle landmarks")
     print(f"Press '{config.get('controls.toggle_looking_detection')}' to toggle looking at camera check")
-    print("Press 'a' to add a new person")
-    print("Press 'r' to retrain model")
+    print("Press 'n' to toggle nose-centered crop visualization")
+    print("Press 'f' to toggle 5-point landmarks visualization")
     print(f"Press '{config.get('controls.quit')}' to quit")
     
     # Main loop variables
@@ -291,27 +332,8 @@ def real_time_recognition(model=None, classes=None):
     show_landmarks = config.get('visualization.landmarks.enabled', True)
     check_looking = config.get('recognition.looking_detection.enabled', True)
     confidence_threshold = config.get('recognition.confidence_threshold', 80.0)
-    
-    # Shared variables for capturing new person
-    capturing_new_person = False
-    new_person_name = ""
-    
-    # Function to handle model retraining in a thread
-    def retrain_model_thread(q):
-        print("Retraining model...")
-        new_model, new_classes = train_model(
-            DATASET_PATH, 
-            MODEL_PATH, 
-            num_epochs=config.get('training.num_epochs'),
-            batch_size=config.get('training.batch_size'),
-            learning_rate=config.get('training.learning_rate')
-        )
-        q.put((new_model, new_classes))
-        print("Model retraining completed!")
-    
-    # Queue for thread communication
-    model_queue = queue.Queue()
-    retraining = False
+    show_nose_centered = False  # Toggle for showing nose-centered crop
+    show_five_landmarks = False  # Toggle for showing 5-point landmarks
     
     while True:
         # Read frame
@@ -326,37 +348,33 @@ def real_time_recognition(model=None, classes=None):
         # Make a copy for display
         display_frame = frame.copy()
         
-        # Check if a new model is available from retraining
-        if not model_queue.empty() and retraining:
-            model, classes = model_queue.get()
-            model.to(device)
-            model.eval()
-            retraining = False
-            print("Updated model loaded!")
-        
         # Detect and analyze faces
         faces = detect_faces(frame, face_analyzer)
         
         # Process each detected face
         for face in faces:
-            if capturing_new_person:
-                # Special mode for adding a new person
-                draw_face_info(display_frame, face, f"Collecting: {new_person_name}", config.get_color('visualization.landmarks.color'))
-                if show_landmarks:
-                    draw_landmarks(display_frame, face, color=config.get_color('visualization.landmarks.color'))
-            else:
-                # Normal recognition mode
-                label, color, looking = process_frame_for_recognition(
-                    frame, face, face_analyzer, model, classes,
-                    device, confidence_threshold, check_looking
-                )
-                
-                # Draw bounding box and label
-                draw_face_info(display_frame, face, label, color)
-                
-                # Draw landmarks if enabled
-                if show_landmarks:
-                    draw_landmarks(display_frame, face, color=color)
+            # If showing 5-point landmarks is enabled
+            if show_five_landmarks:
+                display_frame = draw_five_landmarks(display_frame, face, show_labels=True)
+            
+            # If showing nose-centered crop is enabled
+            if show_nose_centered:
+                display_frame = draw_nose_centered_crop(display_frame, face)
+                # Extract the nose-centered crop for demonstration
+                nose_crop = extract_face(frame, face)
+                # Add crosshair to show center
+                nose_crop = draw_crosshair_center(nose_crop)
+                # Show the crop in a separate window
+                cv2.imshow("Nose-Centered Crop (128x128)", nose_crop)
+            
+            # Normal recognition mode
+            result = process_frame_for_recognition(
+                frame, face, model, classes,
+                device, confidence_threshold, check_looking
+            )
+            
+            # Draw recognition results on display frame
+            draw_recognition_results(display_frame, face, result)
         
         # Calculate processing time and FPS
         process_time = (time.time() - start_time) * 1000  # ms
@@ -364,12 +382,7 @@ def real_time_recognition(model=None, classes=None):
         detection_fps = 0.9 * detection_fps + 0.1 * current_fps if detection_fps > 0 else current_fps
         
         # Additional information to display
-        if capturing_new_person:
-            extra_info = f"Adding {new_person_name} - Press 's' to save face, 'x' to finish"
-        elif retraining:
-            extra_info = "Retraining model in background..."
-        else:
-            extra_info = f"L: landmarks | C: camera-check | A: add person | R: retrain"
+        extra_info = "L: landmarks | C: camera-check | N: nose-crop | F: 5-points"
         
         draw_stats(display_frame, detection_fps, process_time, len(faces), extra_info)
         
@@ -388,44 +401,79 @@ def real_time_recognition(model=None, classes=None):
             # Toggle looking at camera check
             check_looking = not check_looking
             print(f"Looking at camera check: {'ON' if check_looking else 'OFF'}")
-        elif key == ord('a') and not capturing_new_person and not retraining:
-            # Start capturing a new person
-            capturing_new_person = True
-            print("Enter person's name:")
-            new_person_name = input().strip()
-            if new_person_name:
-                person_dir = create_person_dir(new_person_name, DATASET_PATH)
-                print(f"Ready to capture images for {new_person_name}. Press 's' to save faces.")
-            else:
-                capturing_new_person = False
-                print("No name entered. Cancelled.")
-        elif key == ord('s') and capturing_new_person:
-            # Save faces for the new person
-            person_dir = os.path.join(DATASET_PATH, new_person_name.lower().replace(" ", "_"))
-            for face in faces:
-                filename = save_face(frame, face, person_dir)
-                print(f"Face saved: {filename}")
-        elif key == ord('x') and capturing_new_person:
-            # Finish capturing new person
-            capturing_new_person = False
-            print(f"Finished capturing {new_person_name}.")
-        elif key == ord('r') and not retraining and not capturing_new_person:
-            # Retrain the model in a background thread
-            retraining = True
-            train_thread = threading.Thread(target=retrain_model_thread, args=(model_queue,))
-            train_thread.daemon = True
-            train_thread.start()
+        elif key == ord('n'):
+            # Toggle nose-centered crop visualization
+            show_nose_centered = not show_nose_centered
+            print(f"Nose-centered crop visualization: {'ON' if show_nose_centered else 'OFF'}")
+            if not show_nose_centered:
+                cv2.destroyWindow("Nose-Centered Crop (128x128)")
+        elif key == ord('f'):
+            # Toggle 5-point landmarks visualization
+            show_five_landmarks = not show_five_landmarks
+            print(f"5-point landmarks visualization: {'ON' if show_five_landmarks else 'OFF'}")
     
     # Release resources
     cap.release()
     cv2.destroyAllWindows()
 
+def preprocess_and_export_image():
+    print_header("Preprocess and Export Image")
+    # Prompt the user to enter the image path manually
+    file_path = input("Enter the path to the image you want to preprocess: ").strip()
+    if not file_path:
+        print("No file path provided.")
+        wait_key()
+        return
+
+    # Read the image
+    import cv2
+    image = cv2.imread(file_path)
+    if image is None:
+        print("Failed to load image.")
+        wait_key()
+        return
+
+    # Preprocess the image
+    preprocessor = PreprocessModule(target_size=(128, 128))
+    processed = preprocessor.preprocess_face(image)
+
+    # Convert tensor to numpy and save as image (invert ImageNet normalization)
+    import torch
+    if isinstance(processed, torch.Tensor):
+        # Detach and move to CPU
+        arr = processed.detach().cpu().numpy()  # shape (C, H, W)
+        # ImageNet mean and std for normalization
+        mean = np.array([0.485, 0.456, 0.406])[:, None, None]
+        std = np.array([0.229, 0.224, 0.225])[:, None, None]
+        # Invert normalization: x = (x * std) + mean
+        arr = (arr * std) + mean
+        # Clip to [0,1]
+        arr = np.clip(arr, 0, 1)
+        # Convert from (C, H, W) to (H, W, C)
+        processed = arr.transpose(1, 2, 0)
+        # Convert to 0-255 uint8
+        processed = (processed * 255).astype('uint8')
+
+    # Save the processed image
+    out_path = file_path.rsplit('.', 1)[0] + '_preprocessed.png'
+    cv2.imwrite(out_path, processed)
+    print(f"Preprocessed image saved to: {out_path}")
+    wait_key()
+
+def preprocess_all_images():
+    # Bulk preprocess entire dataset
+    print_header("Preprocess All Images")
+    dataset_dir = DATASET_PATH
+    preprocessed_dir = dataset_dir.rstrip(os.sep) + '_preprocessed'
+    print(f"[LOG] Preprocessing all images from {dataset_dir} to {preprocessed_dir}")
+    # Preprocess all images without sampling
+    preprocess_dataset(dataset_dir, preprocessed_dir, target_size=(128,128))
+    print("[LOG] Preprocessing complete.")
+    wait_key()
+    return
+
 # Main application
 def main():
-    # Check if requirements are met
-    if not check_requirements():
-        print("Please install the required packages first.")
-        return
     
     # Create dataset directory if it doesn't exist
     os.makedirs(DATASET_PATH, exist_ok=True)
@@ -463,10 +511,12 @@ def main():
         print("2. Train recognition model")
         print("3. Evaluate recognition model")
         print("4. Run real-time recognition")
-        print("5. Exit")
+        print("5. Preprocess and export an image")
+        print("6. Preprocess all images")
+        print("7. Exit")
         
         # Get user choice
-        choice = input("\nEnter your choice (1-5): ").strip()
+        choice = input("\nEnter your choice (1-7): ").strip()
         
         if choice == "1":
             detect_and_collect_faces()
@@ -477,6 +527,10 @@ def main():
         elif choice == "4":
             real_time_recognition()
         elif choice == "5":
+            preprocess_and_export_image()
+        elif choice == "6":
+            preprocess_all_images()
+        elif choice == "7":
             print("Exiting...")
             break
         else:

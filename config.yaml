@@ -1,7 +1,7 @@
 # System Configuration
 system:
   python_version: "3.11+"
-  device: "cpu"  # "cuda" or "cpu"
+  device: "cuda"  # "cuda" or "cpu"
 
 # Directory Structure
 paths:
@@ -20,26 +20,27 @@ face_detection:
 
 # Image Processing
 image_processing:
-  target_size: [92, 112]  # Width, Height
-  edge_enhancement:
-    alpha: 0.3  # Edge enhancement factor
+  target_size: [128, 128]  # Width, Height
   normalization:
     mean: [0.5]
     std: [0.5]
 
 # Training Configuration
 training:
-  num_epochs: 40
+  num_epochs: 10
   batch_size: 32
   learning_rate: 0.001
   learning_rate_scheduler: false
   dropout_rate: 0.0
   test_images_per_class: 1
   use_augmentation: false
+  sample_per_class: 100  # Number of images per class to sample during preprocessing
+  sample_size: 8000  # Number of images to sample from the 'unknown' class for training
+  seed: 42  # Random seed for reproducible sampling
 
 # Recognition Settings
 recognition:
-  confidence_threshold: 80.0  # Minimum confidence for face recognition
+  confidence_threshold: 50.0  # Minimum confidence for face recognition (lowered from 80.0)
   looking_detection:
     enabled: true
     threshold: 0.75

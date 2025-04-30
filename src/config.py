@@ -1,6 +1,6 @@
 import yaml
 import os
-from typing import Dict, Any
+from typing import Any
 
 class Config:
     _instance = None

@@ -1,59 +1,85 @@
+import os
+# Suppress TensorFlow C++ and Abseil logs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+try:
+    from absl import logging as absl_logging
+    absl_logging.set_verbosity(absl_logging.ERROR)
+except ImportError:
+    pass
+
 import cv2
 import numpy as np
+import mediapipe as mp
+from src.config import config
+from src.face_recognition import TransformFactory
 
-def preprocess_face(face_img, face_landmarks=None):
-    """
-    Apply preprocessing to face images
-    
-    Args:
-        face_img: Face image (BGR format from OpenCV)
-        face_landmarks: Optional facial landmarks for alignment
+class PreprocessModule:
+    def __init__(self, target_size=None):
+        """
+        Initialize the PreprocessModule for background removal, resizing, and normalization.
+
+        Args:
+        - target_size (tuple): The target size for the resized image, defaults to value from config.
+        """
+        # Get target size from config if not provided
+        if target_size is None:
+            self.target_size = tuple(config.get('image_processing.target_size', [128, 128]))
+        else:
+            self.target_size = target_size
         
-    Returns:
-        Processed face image
-    """
-    # Convert to grayscale if not already
-    if len(face_img.shape) == 3:
-        face_gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-    else:
-        face_gray = face_img.copy()
-    
-    # 1. Face Alignment if landmarks are provided
-    if face_landmarks is not None:
-        # Extract eye landmarks
-        left_eye = face_landmarks[0]
-        right_eye = face_landmarks[1]
-        
-        # Calculate angle for alignment
-        eye_center = ((left_eye[0] + right_eye[0]) / 2, (left_eye[1] + right_eye[1]) / 2)
-        angle = np.degrees(np.arctan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0]))
-        
-        # Get rotation matrix
-        height, width = face_gray.shape
-        center = (width / 2, height / 2)
-        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        
-        # Perform rotation
-        face_gray = cv2.warpAffine(face_gray, rotation_matrix, (width, height), 
-                                  flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-    
-    # 2. Histogram Equalization
-    face_gray = cv2.equalizeHist(face_gray)
-    
-    # 3. Edge Enhancement
-    # Apply Sobel operators
-    sobelx = cv2.Sobel(face_gray, cv2.CV_64F, 1, 0, ksize=3)
-    sobely = cv2.Sobel(face_gray, cv2.CV_64F, 0, 1, ksize=3)
-    
-    # Combine edges
-    edges = np.sqrt(sobelx**2 + sobely**2)
-    edges = np.uint8(edges)
-    
-    # Enhance original image with edges
-    alpha = 0.3  # Edge enhancement factor
-    face_gray = cv2.addWeighted(face_gray, 1.0, edges, alpha, 0)
-    
-    # Resize to 92x112 (AT&T Database dimensions)
-    face_resized = cv2.resize(face_gray, (92, 112))
-    
-    return face_resized 
+        # Initialize MediaPipe Selfie Segmentation for background removal
+        self.mp_seg = mp.solutions.selfie_segmentation
+        self.segmenter = self.mp_seg.SelfieSegmentation(model_selection=1)
+
+    def remove_background_grabcut(self, face_image):
+        """
+        Remove background from the face image using MediaPipe Selfie Segmentation
+
+        Args:
+        - face_image (numpy.ndarray): The cropped face image (BGR format).
+
+        Returns:
+        - face_with_no_bg (numpy.ndarray): The face with the background removed.
+        """
+        # Convert BGR to RGB for MediaPipe
+        rgb = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
+        results = self.segmenter.process(rgb)
+        if results.segmentation_mask is None:
+            return face_image
+        # Create binary mask: 1 for foreground, 0 for background
+        mask = (results.segmentation_mask > 0.5).astype(np.uint8)
+        # Expand mask to 3 channels
+        mask_3c = np.stack([mask] * 3, axis=-1)
+        # Apply mask to keep only foreground
+        face_with_no_bg = face_image * mask_3c
+        return face_with_no_bg
+
+    def resize_image(self, face_image):
+        """
+        Resize the image to the target size.
+
+        Args:
+        - face_image (numpy.ndarray): The image to be resized.
+
+        Returns:
+        - face_resized (numpy.ndarray): The resized image.
+        """
+        return cv2.resize(face_image, self.target_size)
+
+    def preprocess_face(self, face_image):
+        """
+        Complete preprocessing pipeline for the cropped face image:
+        - Remove background
+        - Return tensor processed via TransformFactory for consistent normalization
+
+        Args:
+        - face_image (numpy.ndarray): The cropped face image (BGR format).
+
+        Returns:
+        - processed_face (torch.Tensor): The processed face image tensor.
+        """
+        # Background removal
+        face_with_no_bg = self.remove_background_grabcut(face_image)
+        # Use TransformFactory for consistent normalization with rest of application
+        processed_face = TransformFactory.preprocess_face_tensor(face_with_no_bg)
+        return processed_face

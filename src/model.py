@@ -1,93 +1,149 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import pickle
 import os
+from src.config import config
 
-class FaceMLP(nn.Module):
-    """
-    Multi-Layer Perceptron for facial recognition
-    """
-    def __init__(self, input_size=92*112, num_classes=1, dropout_rate=0.3):
-        super(FaceMLP, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(input_size, 512),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(256, num_classes)
-        )
-    
+class FaceRecognitionMLP(nn.Module):
+    def __init__(self, input_size=None, num_classes=None):
+        """
+        Define the layers of the MLP for face recognition.
+
+        Args:
+        - input_size (int): The number of input features (width * height * channels).
+            If None, pulled from config.
+        - num_classes (int): The number of classes (people + "unknown").
+            If None, caller should provide this based on the dataset.
+        """
+        super(FaceRecognitionMLP, self).__init__()
+        
+        # Get input size from config if not provided
+        if input_size is None:
+            target_size = config.get('image_processing.target_size', [128, 128])
+            input_size = target_size[0] * target_size[1] * 3  # Width x Height x RGB
+        
+        # Get dropout rate from config
+        dropout_rate = config.get('training.dropout_rate', 0.0)
+        
+        # Define the layers of the MLP
+        self.fc1 = nn.Linear(input_size, 2048)  # First fully connected layer
+        self.fc2 = nn.Linear(2048, 1024)        # Second fully connected layer
+        self.fc3 = nn.Linear(1024, 512)         # Third fully connected layer
+        self.fc4 = nn.Linear(512, 128)          # Fourth fully connected layer
+        self.fc5 = nn.Linear(128, num_classes)  # Output layer based on number of classes
+        
+        # Add dropout if configured
+        self.dropout = nn.Dropout(dropout_rate) if dropout_rate > 0 else None
+
     def forward(self, x):
-        # Flatten image to vector
+        """
+        Forward pass through the network.
+
+        Args:
+        - x (torch.Tensor): The input image tensor (after preprocessing).
+        
+        Returns:
+        - output (torch.Tensor): The output prediction of the model.
+        """
+        # Flatten the input (batch_size, C, H, W) -> (batch_size, C*H*W)
         x = x.view(x.size(0), -1)
-        return self.model(x)
-
-def load_model(model_path, device=None):
-    """
-    Load a trained model from disk
-    
-    Args:
-        model_path: Path to the model file
-        device: Torch device (CPU/GPU)
         
-    Returns:
-        model: Loaded model
-        classes: List of class names
-    """
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Pass through the layers with ReLU activations
+        x = F.relu(self.fc1(x))  # Apply ReLU after the first layer
         
-    try:
-        # Load checkpoint containing model state and classes
-        checkpoint = torch.load(model_path, map_location=device)
-        
-        # Extract class information
-        if isinstance(checkpoint, dict) and 'classes' in checkpoint:
-            classes = checkpoint['classes']
-            model_state = checkpoint['model_state_dict']
-            print(f"Loaded {len(classes)} classes from model file")
-        else:
-            # Fallback in case model file doesn't contain classes
-            print("Model file doesn't contain class information. Scanning dataset directory...")
-            dataset_path = "dataset/"
-            classes = []
-            if os.path.exists(dataset_path):
-                for item in os.listdir(dataset_path):
-                    item_path = os.path.join(dataset_path, item)
-                    if os.path.isdir(item_path):
-                        classes.append(item)
-            classes.sort()
-            print(f"Found {len(classes)} classes in dataset directory")
-            model_state = checkpoint
+        # Apply dropout if configured
+        if self.dropout is not None:
+            x = self.dropout(x)
             
-        # Initialize model
-        num_classes = len(classes)
-        input_size = 92 * 112 * 1  # grayscale 92x112
-        model = FaceMLP(input_size, num_classes)
+        x = F.relu(self.fc2(x))  # Apply ReLU after the second layer
         
-        # Load weights
-        model.load_state_dict(model_state)
-        model.to(device)
-        model.eval()  # Set to evaluation mode
+        if self.dropout is not None:
+            x = self.dropout(x)
+            
+        x = F.relu(self.fc3(x))  # Apply ReLU after the third layer
         
-        return model, classes
-    
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return None, []
+        if self.dropout is not None:
+            x = self.dropout(x)
+            
+        x = F.relu(self.fc4(x))  # Apply ReLU after the fourth layer
+        
+        # Final output layer (no activation here, raw logits for classification)
+        output = self.fc5(x)
+        
+        return output
 
-def save_model(model, classes, model_path):
+
+def save_model(model, classes, model_path, classes_path=None):
     """
-    Save model to disk
-    
+    Save the model weights and class list.
     Args:
-        model: The model to save
+        model: Trained FaceRecognitionMLP model
         classes: List of class names
-        model_path: Path to save the model
+        model_path: Path to save model weights (.pth)
+        classes_path: Path to save class list (.pkl). If None, uses model_path with .pkl extension.
     """
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'classes': classes
-    }, model_path)
-    print(f"Model saved to: {model_path}") 
+    torch.save(model.state_dict(), model_path)
+    if classes_path is None:
+        classes_path = os.path.splitext(model_path)[0] + '.pkl'
+    with open(classes_path, 'wb') as f:
+        pickle.dump(classes, f)
+
+
+def load_model(model_path, device, classes_path=None):
+    """
+    Load the model weights and class list.
+    Args:
+        model_path: Path to model weights (.pth)
+        device: torch.device
+        classes_path: Path to class list (.pkl). If None, uses model_path with .pkl extension.
+    Returns:
+        model: Loaded FaceRecognitionMLP model
+        classes: List of class names
+    """
+    # Set random seed for consistent initialization
+    seed = config.get('training.seed', 42)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+    
+    if classes_path is None:
+        classes_path = os.path.splitext(model_path)[0] + '.pkl'
+    
+    # Check if files exist
+    if not os.path.exists(model_path):
+        print(f"Error: Model file {model_path} not found")
+        return None, None
+    
+    if not os.path.exists(classes_path):
+        print(f"Error: Classes file {classes_path} not found")
+        return None, None
+    
+    # Load class list
+    try:
+        with open(classes_path, 'rb') as f:
+            classes = pickle.load(f)
+        num_classes = len(classes)
+    except Exception as e:
+        print(f"Error loading classes: {e}")
+        return None, None
+    
+    # Get input size from config
+    target_size = config.get('image_processing.target_size', [128, 128])
+    input_size = target_size[0] * target_size[1] * 3  # Width x Height x RGB
+    
+    # Create model with the right input and output sizes
+    model = FaceRecognitionMLP(input_size, num_classes)
+    
+    # Load state dict with strict=True to ensure all parameters are loaded correctly
+    try:
+        model.load_state_dict(torch.load(model_path, map_location=device), strict=True)
+        print(f"Model loaded successfully from {model_path}")
+    except Exception as e:
+        print(f"Error loading model parameters: {e}")
+        print("This could cause inconsistent recognition results.")
+        return None, None
+    
+    model.to(device)
+    model.eval()
+    return model, classes

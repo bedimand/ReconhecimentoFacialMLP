@@ -12,14 +12,17 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "Pillow>=8.0.0",
-    "opencv-python-headless>=4.5.0",
-    "opencv-contrib-python>=4.5.0",
+    "opencv-python",
+    "opencv-contrib-python",
     "numpy>=1.24.0,<2.0.0",
     "insightface>=0.7.0",
     "onnxruntime-gpu>=1.8.0",
     "pyyaml>=6.0",
     "scikit-learn>=1.2.0",
-    "matplotlib>=3.6.0"
+    "matplotlib>=3.6.0",
+    "mediapipe",
+    "albumentations>=2.0.6"
+
 ]
 
 [project.optional-dependencies]

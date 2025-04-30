@@ -1,30 +1,5 @@
 import os
 import sys
-import subprocess
-import time
-from pathlib import Path
-
-def check_requirements():
-    """
-    Check if required packages are installed
-    
-    Returns:
-        bool: True if all requirements are met
-    """
-    try:
-        import cv2
-        import numpy
-        import torch
-        import torchvision
-        import insightface
-        import onnxruntime
-        import PIL
-        from tqdm import tqdm
-        return True
-    except ImportError as e:
-        print(f"Missing required package: {e}")
-        print("Please run download_models.py to install required packages")
-        return False
 
 def get_device():
     """
