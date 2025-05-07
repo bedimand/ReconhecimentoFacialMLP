@@ -178,3 +178,97 @@ Este design simples e direto permite fácil treinamento com os dados coletados, 
 ### Avaliação
 - Geração de relatório detalhado via `sklearn.classification_report`.
 - Matriz de confusão plotada e salva como `confusion_matrix.png`.
+
+### Fluxo de Processamento em Tempo Real
+
+O diagrama abaixo mostra as funções e configurações aplicadas em cada etapa do reconhecimento em tempo real:
+
+```text
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [1] CAPTURA                                                               │
+│ - cv2.VideoCapture(0)                                                     │
+│ - cap.set(CAP_PROP_FRAME_WIDTH/HEIGHT, config.get('camera.width/height')) │
+│ - ret, frame = cap.read()                                                 │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [2] DETECÇÃO                                                              │
+│ - detect_faces(frame, face_analyzer)                                      │
+│ - InsightFaceFaceAnalysis.get(frame)                                      │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [3] LOOP POR FACE                                                         │
+│ for face in faces:                                                        │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [4] EXTRAÇÃO                                                              │
+│ - extract_face(frame, face)                                               │
+│ - center_crop_around_nose(...) usando face.bbox e face.kps                │
+│ - redimensiona para config.get('image_processing.target_size')            │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [5] PRÉ-PROCESSAMENTO                                                     │
+│ - PreprocessModule.remove_background_grabcut(face_img)                    │
+│   (MediaPipe SelfieSegmentation)                                          │
+│ - TransformFactory.preprocess_face_tensor(face_no_bg, device)             │
+│   (ToTensor, Normalize(mean,std) do config)                                │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [6] INFERÊNCIA                                                            │
+│ - recognize_face(model, face_img, classes, device)                        │
+│ - model(face_tensor) + softmax(outputs)                                   │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [7] PÓS-PROCESSAMENTO                                                     │
+│ - if confidence < config.get('recognition.confidence_threshold'):        │
+│     result['label']='Desconhecido'                                        │
+│   else: result['label']=nome + f": {confidence:.1f}%"                   │
+│ - escolhe result['color'] conforme config                                │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [8] DESENHO                                                               │
+│ - draw_recognition_results(frame, face, result)                           │
+│ - draw_stats(frame, fps, process_time, len(faces), extra_info)            │
+└───────────────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [9] EXIBIÇÃO                                                              │
+│ - cv2.imshow("Face Recognition", frame)                                 │
+│ - key = cv2.waitKey(1) para controle de teclas                            │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Detalhes de cada etapa:**
+
+1. **Captura**: Frame RGB capturado via OpenCV da webcam (configurável para 1280×720)
+2. **Detecção**: InsightFace detecta faces, retornando bounding boxes e landmarks (106 + 5 pontos-chave)
+3. **Loop de faces**: Cada face detectada é processada separadamente
+4. **Extração**: Recorte da face centralizado no nariz usando distância interpupilar para escala
+5. **Pré-processamento**:
+   - Remoção de fundo via MediaPipe SelfieSegmentation
+   - Conversão para tensor PyTorch
+   - Normalização usando médias/desvios do ImageNet
+   - Adição da dimensão de lote (batch)
+6. **Inferência**: Forward pass no MLP seguido de softmax para obter probabilidades
+7. **Pós-processamento**:
+   - Verificação contra threshold de confiança (`recognition.confidence_threshold`)
+   - Decisão entre "unknown" e pessoa reconhecida
+   - Formatação da etiqueta com nome e porcentagem
+8. **Visualização**: Desenho de caixa delimitadora, rótulo e informações de estatísticas no frame
+9. **Exibição**: Apresentação do frame processado com anotações ao usuário
+
+Este fluxo executa em tempo real em um loop contínuo, processando cada frame capturado.
