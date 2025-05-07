@@ -1,6 +1,10 @@
-from src.face_detection import extract_face, is_looking_at_camera
-from src.face_recognition import recognize_face
-from src.config import config
+from src.face.face_detection import extract_face, is_looking_at_camera
+from src.face.face_recognition import recognize_face
+from src.utils.config import config
+from src.face.preprocessing import PreprocessModule
+
+# Lazy-initialized background-removal preprocessor for real-time inference
+_preprocessor = None
 
 def process_frame_for_recognition(frame, face, model, classes, device, confidence_threshold=None, check_looking=None):
     """
@@ -49,6 +53,16 @@ def process_frame_for_recognition(frame, face, model, classes, device, confidenc
     if looking_at_camera:
         # Extract face crop
         face_img = extract_face(frame, face)
+        # Lazy initialize the background-removal preprocessor
+        global _preprocessor
+        if _preprocessor is None:
+            try:
+                _preprocessor = PreprocessModule()
+            except Exception as e:
+                print(f"Warning: could not initialize PreprocessModule: {e}")
+        # Apply background removal if available
+        if _preprocessor:
+            face_img = _preprocessor.remove_background_grabcut(face_img)
         
         # Perform recognition
         predicted_class, confidence, all_probabilities = recognize_face(

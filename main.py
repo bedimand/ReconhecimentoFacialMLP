@@ -6,23 +6,23 @@ import time
 import json
 from datetime import datetime
 
-from src.config import config
-from src.utils import (
+from src.utils.config import config
+from src.utils.utils import (
     clear_console, 
     print_header,
     wait_key,
     create_person_dir,
     count_images_by_person
 )
-from src.face_detection import (
+from src.face.face_detection import (
     initialize_face_analyzer, 
     detect_faces, 
     save_face,
     extract_face
 )
 from src.frame_processor import process_frame_for_recognition
-from src.evaluation import evaluate_model, print_evaluation_results, plot_confusion_matrix
-from src.visualization import (
+from src.model.evaluation import evaluate_model, print_evaluation_results, plot_confusion_matrix
+from src.utils.visualization import (
     draw_landmarks, 
     draw_stats, 
     draw_five_landmarks, 
@@ -30,10 +30,11 @@ from src.visualization import (
     draw_crosshair_center,
     draw_recognition_results
 )
-from src.train import train_model
-from src.preprocessing_dataset import preprocess_dataset
-from src.model import load_model
-from src.preprocessing import PreprocessModule
+from src.model.train import train_model
+from src.data.preprocessing_dataset import preprocess_dataset
+from src.model.model import load_model
+from src.face.preprocessing import PreprocessModule
+from src.utils.capture_faces import process_images
 
 # Get paths from config
 DATASET_PATH = config.get_dataset_dir()
@@ -158,6 +159,57 @@ def detect_and_collect_faces():
     cap.release()
     cv2.destroyAllWindows()
     print(f"Total faces saved: {face_count}")
+    wait_key()
+
+# Function to capture faces from images in a folder
+def capture_faces_from_folder():
+    print_header("Capture Faces from Image Folder")
+    
+    # Ask for the folder path
+    print("Enter the folder path containing the images:")
+    folder_path = input().strip()
+    
+    if not folder_path:
+        print("No folder path provided.")
+        wait_key()
+        return
+    
+    if not os.path.exists(folder_path):
+        print(f"Error: Folder '{folder_path}' does not exist.")
+        wait_key()
+        return
+    
+    # Ask for person's name
+    print("Enter the person's name (or press Enter for unnamed faces):")
+    person_name = input().strip()
+    
+    # Ask for visualization preferences
+    print("\nVisualization options:")
+    print("1. Show each image and wait for keypress (interactive)")
+    print("2. Process all images without stopping (automatic)")
+    print("3. No visualization (fastest)")
+    viz_choice = input("Enter your choice (1-3): ").strip()
+    
+    auto_process = viz_choice == "2"
+    show_viz = viz_choice in ("1", "2", "")
+    
+    # Ask about saving visualization images
+    print("\nSave visualization images with detected faces? (y/n):")
+    save_viz = input().strip().lower() in ('y', 'yes', 'true', '1')
+    
+    print("\nStarting face capture from images...")
+    print("This will use the same nose-centered approach as the real-time capture.")
+    print("Images will be saved to your dataset folder.")
+    
+    # Process the images
+    process_images(
+        folder_path,
+        person_name=person_name if person_name else None,
+        show_visualization=show_viz and not auto_process,
+        save_visualization=save_viz,
+        auto_continue=auto_process
+    )
+    
     wait_key()
 
 # Function to train the recognition model
@@ -507,30 +559,33 @@ def main():
         
         # Display menu
         print("\nSelect an option:")
-        print("1. Detect and collect face images")
-        print("2. Train recognition model")
-        print("3. Evaluate recognition model")
-        print("4. Run real-time recognition")
-        print("5. Preprocess and export an image")
-        print("6. Preprocess all images")
-        print("7. Exit")
+        print("1. Detect and collect face images (webcam)")
+        print("2. Capture faces from image folder")
+        print("3. Train recognition model")
+        print("4. Evaluate recognition model")
+        print("5. Run real-time recognition")
+        print("6. Preprocess and export an image")
+        print("7. Preprocess all images")
+        print("8. Exit")
         
         # Get user choice
-        choice = input("\nEnter your choice (1-7): ").strip()
+        choice = input("\nEnter your choice (1-8): ").strip()
         
         if choice == "1":
             detect_and_collect_faces()
         elif choice == "2":
-            train_recognition_model()
+            capture_faces_from_folder()
         elif choice == "3":
-            evaluate_recognition_model()
+            train_recognition_model()
         elif choice == "4":
-            real_time_recognition()
+            evaluate_recognition_model()
         elif choice == "5":
-            preprocess_and_export_image()
+            real_time_recognition()
         elif choice == "6":
-            preprocess_all_images()
+            preprocess_and_export_image()
         elif choice == "7":
+            preprocess_all_images()
+        elif choice == "8":
             print("Exiting...")
             break
         else:

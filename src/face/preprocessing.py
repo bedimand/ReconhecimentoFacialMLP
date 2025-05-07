@@ -10,8 +10,8 @@ except ImportError:
 import cv2
 import numpy as np
 import mediapipe as mp
-from src.config import config
-from src.face_recognition import TransformFactory
+from src.utils.config import config
+from src.face.face_recognition import TransformFactory
 
 class PreprocessModule:
     def __init__(self, target_size=None):

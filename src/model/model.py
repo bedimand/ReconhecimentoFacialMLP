@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 import os
-from src.config import config
+from src.utils.config import config
 
 class FaceRecognitionMLP(nn.Module):
     def __init__(self, input_size=None, num_classes=None):
@@ -83,9 +83,14 @@ def save_model(model, classes, model_path, classes_path=None):
         model_path: Path to save model weights (.pth)
         classes_path: Path to save class list (.pkl). If None, uses model_path with .pkl extension.
     """
+    # Ensure model directory exists
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
     torch.save(model.state_dict(), model_path)
+    
     if classes_path is None:
         classes_path = os.path.splitext(model_path)[0] + '.pkl'
+    # Ensure classes directory exists
+    os.makedirs(os.path.dirname(classes_path), exist_ok=True)
     with open(classes_path, 'wb') as f:
         pickle.dump(classes, f)
 

@@ -27,20 +27,20 @@ image_processing:
 
 # Training Configuration
 training:
-  num_epochs: 10
+  num_epochs: 50
   batch_size: 32
   learning_rate: 0.001
-  learning_rate_scheduler: false
-  dropout_rate: 0.0
-  test_images_per_class: 1
-  use_augmentation: false
-  sample_per_class: 100  # Number of images per class to sample during preprocessing
-  sample_size: 8000  # Number of images to sample from the 'unknown' class for training
-  seed: 42  # Random seed for reproducible sampling
+  sample_per_class: 100
+  sample_size: 8000
+  seed: 42
+  validation_split: 0.1
+  early_stopping:
+    enabled: true
+    patience: 7
 
-# Recognition Settings
+# Recognitiodsadsan Settings
 recognition:
-  confidence_threshold: 50.0  # Minimum confidence for face recognition (lowered from 80.0)
+  confidence_threshold: 30.0  # Minimum confidence for face recognition
   looking_detection:
     enabled: true
     threshold: 0.75

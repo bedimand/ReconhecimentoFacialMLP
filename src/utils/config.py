@@ -14,7 +14,7 @@ class Config:
 
     def _load_config(self):
         """Load configuration from config.yaml"""
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         try:
             with open(config_path, 'r') as f:
                 self._config = yaml.safe_load(f)

@@ -6,11 +6,11 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import random
 import json
-from src.model import FaceRecognitionMLP, save_model
-from src.datasets import FaceDataset, get_classes
-from src.face_recognition import TransformFactory
-from src.utils import wait_key, print_header
-from src.config import config
+from src.model.model import FaceRecognitionMLP, save_model
+from src.data.datasets import FaceDataset, get_classes
+from src.face.face_recognition import TransformFactory
+from src.utils.utils import wait_key, print_header
+from src.utils.config import config
 
 def train_model(dataset_path, model_save_path, num_epochs=None, batch_size=None, learning_rate=None):
     """
@@ -68,7 +68,7 @@ def train_model(dataset_path, model_save_path, num_epochs=None, batch_size=None,
     
     # Get sampling parameters
     known_sample_size = config.get('training.sample_per_class', 100)
-    unknown_sample_size = config.get('training.sample_size', 4000)
+    unknown_sample_size = config.get('training.sample_size', 15000)
     seed = config.get('training.seed', 42)
     random.seed(seed)
     
@@ -204,9 +204,22 @@ def train(model, train_loader, device, num_epochs, learning_rate):
     Returns:
         model: Trained model
     """
-    # Loss function and optimizer
+    # Setup loss function
     criterion = nn.CrossEntropyLoss()
+    
+    # Setup optimizer
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # Setup early stopping if enabled
+    early_stop_cfg = config.get('training.early_stopping', {})
+    if early_stop_cfg.get('enabled', False):
+        patience = early_stop_cfg.get('patience', 5)
+        best_loss = float('inf')
+        epochs_no_improve = 0
+    else:
+        patience = None
+        best_loss = None
+        epochs_no_improve = None
     
     # Training loop
     print_header("Training Face Recognition Model")
@@ -243,5 +256,16 @@ def train(model, train_loader, device, num_epochs, learning_rate):
         epoch_loss = running_loss / len(train_loader)
         epoch_acc = 100 * correct / total
         print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.2f}%")
+        
+        # Early stopping check
+        if patience is not None:
+            if epoch_loss < best_loss:
+                best_loss = epoch_loss
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= patience:
+                    print(f"Early stopping triggered after epoch {epoch+1}")
+                    break
     
     return model 

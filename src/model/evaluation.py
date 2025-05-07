@@ -3,7 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Subset, DataLoader
-from src.face_recognition import TransformFactory
+from src.face.face_recognition import TransformFactory
 
 def evaluate_model(model, dataset_path, classes, device, manifest=None):
     """
@@ -21,7 +21,7 @@ def evaluate_model(model, dataset_path, classes, device, manifest=None):
         confusion_mat: Confusion matrix
         class_accuracies: Per-class accuracy dict
     """
-    from src.datasets import FaceDataset
+    from src.data.datasets import FaceDataset
     
     # Get centralized transform
     transform = TransformFactory.get_face_transform()

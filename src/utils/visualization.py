@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from src.utils.config import config
 
 def draw_landmarks(frame, face, color=(0, 255, 255)):
     """
@@ -106,7 +107,7 @@ def draw_five_landmarks(frame, face, show_labels=False, point_size=5, line_thick
     
     return vis_frame
 
-def draw_nose_centered_crop(frame, face, crop_size=(128, 128)):
+def draw_nose_centered_crop(frame, face, crop_size=None):
     """
     Visualize how the nose-centered crop will be performed showing a tighter face crop
     
@@ -123,6 +124,10 @@ def draw_nose_centered_crop(frame, face, crop_size=(128, 128)):
     
     # Make a copy of the frame
     vis_frame = frame.copy()
+    
+    # Determine crop size from config if not provided
+    if crop_size is None:
+        crop_size = tuple(config.get('image_processing.target_size', [128, 128]))
     
     # Get frame dimensions
     frame_h, frame_w = vis_frame.shape[:2]
@@ -145,7 +150,7 @@ def draw_nose_centered_crop(frame, face, crop_size=(128, 128)):
     eye_distance = np.sqrt((left_eye[0] - right_eye[0])**2 + (left_eye[1] - right_eye[1])**2)
     
     # Use eye distance to determine crop size (typically faces are ~2.5-3x eye distance in width)
-    face_scale = 2.2  # This controls how tight the crop will be (lower = tighter)
+    face_scale = 2.7  # Unified crop scale to match extraction
     ideal_size = int(eye_distance * face_scale)
     
     # Calculate square region around nose using the ideal size

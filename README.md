@@ -1,174 +1,180 @@
-# Sistema de Reconhecimento Facial
+# Sistema de Reconhecimento Facial com MLP
 
-Um sistema completo de reconhecimento facial que inclui captura de imagens, treinamento de modelo, avaliação e reconhecimento em tempo real.
+Este projeto implementa um sistema completo de reconhecimento facial baseado em uma Rede Neural Perceptron Multicamadas (MLP), contemplando etapas de coleta, pré-processamento, treinamento, avaliação e inferência em tempo real.
 
-## Componentes do Sistema
+---
 
-O sistema é composto por cinco módulos principais:
+## 📂 Estrutura do Projeto
 
-### 1. Download de Modelos (`download_models.py`)
+- **main.py**            : Ponto de entrada. Exibe menu interativo para executar cada etapa do fluxo.
+- **config.yaml**        : Arquivo de configuração com parâmetros (caminhos, tamanho de imagem, hiperparâmetros, controles).
+- **src/**               : Código-fonte principal organizado por funcionalidade:
+  - **model/**              : Arquivos relacionados ao modelo neural:
+    - **model.py**          : Definição da classe `FaceRecognitionMLP`, funções de salvar e carregar modelo.
+    - **train.py**          : Função `train_model` para treinamento com balanceamento de classes e manifest.
+    - **evaluation.py**     : Funções de avaliação (acurácia, relatório de classificação e matriz de confusão).
+  - **face/**               : Processamento de faces:
+    - **face_detection.py** : Detecção via InsightFace e extração de crops centralizados no nariz.
+    - **face_recognition.py** : `TransformFactory` para transformações e rotina de inferência (`recognize_face`).
+    - **preprocessing.py**  : Módulo de remoção de fundo (MediaPipe) e normalização.
+  - **data/**               : Manipulação de dados:
+    - **datasets.py**       : Definições de conjuntos de dados e obtenção de classes.
+    - **preprocessing_dataset.py** : Rotina em lote para pré-processar dataset completo.
+  - **utils/**              : Utilitários diversos:
+    - **utils.py**          : Utilitários gerais (console, contagem de imagens, criação de pastas).
+    - **visualization.py**  : Desenho de bounding boxes, landmarks, estatísticas e previews.
+    - **config.py**         : Carrega `config.yaml` e fornece métodos de acesso às configurações.
+    - **capture_faces.py**  : Script para extrair faces de uma pasta de imagens (modo batch).
+  - **frame_processor.py**  : Integra detecção e reconhecimento em um frame de vídeo.
 
-Ferramenta para baixar e configurar os modelos necessários para o sistema.
+---
 
-- Verifica a versão do Python (3.7+)
-- Instala automaticamente as dependências necessárias
-- Baixa os modelos do InsightFace para detecção facial e landmarks
-- Cria a estrutura de diretórios necessária
+## 📝 Requisitos
 
-### 2. Detector de Faces (`face_detector.py`)
+- Python 3.7 ou superior
+- Pacotes (via `pip install -r requirements.txt`):
+  - opencv-python
+  - torch, torchvision
+  - insightface, onnxruntime
+  - mediapipe
+  - pyyaml
+  - numpy, Pillow
+  - scikit-learn, matplotlib, tqdm
 
-Ferramenta para capturar e salvar imagens de faces para criar um dataset de treinamento.
+- (Opcional) GPU compatível com CUDA para aceleração
 
-- Utiliza InsightFace para detecção precisa de faces
-- Mostra pontos de referência faciais (landmarks)
-- Opções para salvar automaticamente ou manualmente as faces detectadas
-- Aplica pré-processamento avançado às imagens:
-  - Alinhamento facial usando pontos de referência
-  - Equalização de histograma para melhorar o contraste
-  - Realce de bordas para destacar características faciais
-- Redimensiona as imagens para 92x112 pixels em escala de cinza
+---
 
-### 3. Treinamento do Modelo (`train_model.py`)
+## ⚙️ Configuração
 
-Módulo para treinar o modelo de reconhecimento facial a partir do dataset criado.
+1. Renomeie e adapte `config.yaml` conforme seu ambiente:
+   - `paths.dataset_dir`   : Diretório para armazenar imagens coletadas
+   - `paths.model_save_path`: Caminho para salvar o peso do modelo (`.pth`)
+   - `image_processing.target_size`: Tamanho (L×A) do crop de face
+   - Hiperparâmetros de treinamento (`training.*`)
+   - Controles de teclado e cores de visualização
 
-- Detecta automaticamente as classes (pessoas) com base nas pastas do dataset
-- Utiliza todas as imagens exceto as 3 últimas de cada classe para treinamento
-- Aplica o mesmo pré-processamento usado na captura de imagens
-- Implementa uma rede neural MLP para reconhecimento
-- Salva o modelo treinado com informações das classes para uso posterior
+2. (Opcional) Baixe os modelos do InsightFace em `models/insightface` ou ajuste o `root` no código.
 
-### 4. Avaliador do Modelo (`predictor.py`)
+---
 
-Ferramenta para avaliar o desempenho do modelo treinado.
+## 🚀 Fluxo de Uso
 
-- Avalia o modelo usando as 3 últimas imagens de cada classe
-- Fornece estatísticas detalhadas de precisão por classe
-- Permite testar imagens específicas individualmente
-- Exibe níveis de confiança para cada predição
+Execute:
 
-### 5. Reconhecimento em Tempo Real (`real_time_recognition.py`)
-
-Sistema para reconhecimento facial em tempo real usando a webcam.
-
-- Detecta e reconhece faces em tempo real
-- Aplica o mesmo pré-processamento usado no treinamento
-- Verifica se a pessoa está olhando para a câmera
-- Exibe landmarks faciais para visualização
-- Interface com atalhos de teclado para controlar diferentes recursos
-
-## Requisitos
-
-- Python 3.7+
-- PyTorch
-- OpenCV
-- InsightFace
-- NumPy
-- PIL (Pillow)
-- ONNX Runtime
-
-## Instalação
-
-1. Clone este repositório:
 ```bash
-git clone <URL_DO_REPOSITÓRIO>
-cd <NOME_DO_REPOSITÓRIO>
+python main.py
 ```
 
-2. Execute o script de download de modelos:
-```bash
-python download_models.py
-```
+O menu oferece as opções:
 
-Este script irá:
-- Verificar a versão do Python
-- Instalar todas as dependências necessárias
-- Baixar os modelos do InsightFace
-- Configurar a estrutura de diretórios
+1. **Detectar e coletar faces (webcam)**
+   - Faz detecção em tempo real, desenha landmarks e captura crops centralizados no nariz.
+   - Aperte tecla configurada para salvar faces individuais ou ative auto-save.
 
-## Estrutura do Dataset
+2. **Capturar faces de pasta de imagens**
+   - Processa todas as imagens de uma pasta, com ou sem visualização, salvando crops no dataset.
 
-O dataset deve seguir a seguinte estrutura:
-```
-dataset/
-  ├── pessoa1/
-  │     ├── imagem1.pgm
-  │     ├── imagem2.pgm
-  │     └── ...
-  ├── pessoa2/
-  │     ├── imagem1.pgm
-  │     └── ...
-  └── ...
-```
+3. **Treinar modelo de reconhecimento**
+   - Pré-requisito: execute pré-processamento ou tenha `_preprocessed` no dataset.
+   - Gera um manifest para separar treino e validação, treina o MLP e salva pesos e classes.
 
-Cada pasta representa uma pessoa/classe e deve conter várias imagens faciais. As 3 últimas imagens (em ordem alfabética) serão reservadas para teste.
+4. **Avaliar modelo de reconhecimento**
+   - Carrega o modelo salvo, exclui imagens de treino via manifest e calcula acurácia e matriz de confusão.
 
-## Como Usar
+5. **Reconhecimento em tempo real**
+   - Captura vídeo da webcam, detecta faces, aplica remoção de fundo, reconhece usando o MLP e exibe rótulos.
 
-### 1. Configuração Inicial
+6. **Pré-processar e exportar imagem única**
+   - Permite carregar e pré-processar um arquivo de imagem, salvando o resultado normalizado.
 
-Execute o script de download de modelos:
-```bash
-python download_models.py
-```
+7. **Pré-processar todas as imagens**
+   - Executa em lote o pipeline de remoção de fundo + resize em todo o dataset.
 
-### 2. Criar um Dataset
+8. **Sair**
 
-Use o detector de faces para criar um dataset:
-```bash
-python face_detector.py
-```
-- Pressione `s` para salvar faces detectadas
-- Pressione `a` para ativar/desativar o salvamento automático
-- Pressione `l` para ativar/desativar a exibição de landmarks
-- Organize manualmente as imagens salvas em pastas por pessoa
+---
 
-### 3. Treinar o Modelo
+## 🔍 Detalhes Técnicos
 
-Treine o modelo com seu dataset:
-```bash
-python train_model.py
-```
-O modelo treinado será salvo como `face_mlp.pth`.
+### Detecção e Extração
+- InsightFace (`FaceAnalysis`) detecta bounding boxes, 106 landmarks e 5 pontos-chave (kps).
+- `extract_face` centraliza o crop no nariz, dimensiona baseado na distância interpupilar e redimensiona ao tamanho configurado.
 
-### 4. Avaliar o Modelo
+### Pré-processamento
+- Offline: `PreprocessModule` usa MediaPipe para remover o fundo antes de salvar imagens em `_preprocessed`.
+- Em tempo real: aplica `remove_background_grabcut` antes de normalizar e enviar ao modelo.
+- Normalização: pipeline `ToTensor` + `Normalize` (médias e desvios padrão de ImageNet ou configurados).
 
-Avalie o desempenho do modelo:
-```bash
-python predictor.py
-```
-Escolha a opção 1 para avaliar em todas as imagens de teste ou a opção 2 para testar uma imagem específica.
+### Arquitetura do Modelo
+- MLP com camadas fully-connected:  input→2048→1024→512→128→num_classes.
+- Dropout opcional, Adam optimizer, CrossEntropyLoss, scheduler e early stopping configuráveis.
+- Balanceamento de classes via amostragem de instâncias e manifest.
 
-### 5. Reconhecimento em Tempo Real
+#### 🧠 Entendendo o MLP de forma simples
 
-Execute o reconhecimento facial em tempo real:
-```bash
-python real_time_recognition.py
-```
-- Pressione `l` para ativar/desativar a exibição de landmarks
-- Pressione `c` para ativar/desativar a verificação de olhar para a câmera
-- Pressione `+`/`-` para ajustar o limite de detecção do olhar
-- Pressione `q` para sair
+Uma rede MLP (Perceptron Multicamadas) funciona de maneira semelhante ao cérebro humano, onde "neurônios artificiais" processam informações em camadas.
 
-## Pré-processamento de Imagens
+**Como funciona nosso reconhecimento facial:**
 
-O sistema aplica um pré-processamento avançado a todas as imagens faciais:
+1. **Transformação da imagem em números**:
+   - Cada imagem de rosto (128×128 pixels) é convertida em uma longa lista de 49.152 números (128×128×3 canais RGB)
+   - É como "achatar" uma foto colorida em uma única fileira de números
 
-1. **Alinhamento Facial**: Usa os pontos de referência dos olhos para alinhar o rosto horizontalmente
-2. **Equalização de Histograma**: Normaliza o contraste da imagem para lidar com variações de iluminação
-3. **Realce de Bordas**: Aplica operadores Sobel para destacar características faciais importantes
+2. **Processamento em camadas**:
+   - **Primeira camada (2048 neurônios)**: Recebe os 49.152 números e identifica padrões básicos (como bordas, contornos)
+   - **Camadas intermediárias (1024→512→128 neurônios)**: Combinam esses padrões em características mais complexas (formato dos olhos, nariz, etc.)
+   - **Camada final (número de pessoas)**: Cada neurônio representa uma pessoa. O que "acender mais forte" indica quem é reconhecido
 
-Este pré-processamento consistente entre captura, treinamento e reconhecimento em tempo real melhora significativamente a precisão do sistema.
+3. **Decisão por "votação"**:
+   - Após passar pelos cálculos internos, cada neurônio de saída tem um "valor de ativação"
+   - O neurônio com maior valor determina a pessoa reconhecida
+   - Esse valor é convertido em percentual de confiança (ex: "João: 92.5%")
 
-## Personalização
+**Analogia:** Imagine uma série de filtros cada vez mais específicos. O primeiro filtro separa "é um rosto?" da imagem inicial. Os filtros seguintes procuram características específicas: "tem olhos verdes?", "tem nariz fino?", "tem queixo marcado?". A combinação única dessas características permite identificar a pessoa específica.
 
-- Ajuste o limite de confiança (`confidence_threshold`) no arquivo `real_time_recognition.py` para controlar a sensibilidade do reconhecimento
-- Modifique parâmetros de treinamento como número de épocas, tamanho do batch e taxa de aprendizado no arquivo `train_model.py`
-- Ajuste o fator de realce de bordas (`alpha`) nos arquivos de pré-processamento para controlar a intensidade do realce
+**Durante o treinamento**, o sistema aprende automaticamente quais características são mais importantes para distinguir cada pessoa no dataset, ajustando milhões de "pesos" internos que determinam como os padrões são interpretados.
 
-## Notas
+**Na identificação em tempo real**, uma nova imagem percorre o mesmo caminho, e a rede compara seus padrões com o que aprendeu anteriormente.
 
-- O sistema funciona melhor com boa iluminação e quando a pessoa está olhando diretamente para a câmera
-- Para melhor precisão, inclua pelo menos 5-10 imagens por pessoa no dataset de treinamento
-- As imagens são armazenadas no formato PGM e redimensionadas para 92x112 pixels, seguindo o padrão do AT&T Database of Faces
-- O pré-processamento avançado ajuda a lidar com variações de iluminação e orientação facial
+#### Detalhes da Rede MLP
+
+A parte central do sistema é a Rede Neural Multicamadas (MLP) definida em `src/model/model.py` na classe `FaceRecognitionMLP`. Seus principais aspectos são:
+
+1. **Tamanho da entrada**
+   - Cada crop é redimensionado ao tamanho `(H, W)` configurado em `config.yaml` (`image_processing.target_size`).
+   - O tensor resultante tem forma `(C, H, W)` e é achatado para `(C*H*W)` antes de entrar no MLP.
+
+2. **Camadas fully-connected**
+   - `fc1`: `input_size` → 2048 unidades
+   - `fc2`: 2048 → 1024 unidades
+   - `fc3`: 1024 → 512 unidades
+   - `fc4`: 512 → 128 unidades
+   - `fc5`: 128 → `num_classes` (número de pessoas + `unknown`)
+
+3. **Função de ativação**
+   - ReLU após cada uma das quatro primeiras camadas (`fc1` a `fc4`).
+   - Sem ativação na camada de saída (`fc5`), pois usa logits para `softmax`.
+
+4. **Dropout**
+   - Adicionado entre as camadas, se `training.dropout_rate > 0`.
+   - Taxa configurável via `config.yaml` (`training.dropout_rate`).
+
+5. **Treinamento**
+   - **Perda**: `CrossEntropyLoss` padrão.
+   - **Otimizador**: Adam, com taxa de aprendizado em `training.learning_rate` (padrão: 0.001).
+   - **Early stopping**: Configuraado em `training.early_stopping.patience` (padrão: 7 épocas).
+   - **Balanceamento**: Amostragem limitada por classe (max `training.sample_per_class` imagens por pessoa).
+
+6. **Persistência**
+   - Ao final do treinamento, `save_model` grava os pesos em `.pth` e a lista de classes em `.pkl`, criando diretórios automaticamente.
+
+7. **Uso em Inferência**
+   - Em `src/face/face_recognition.py`, o método `recognize_face` aplica `softmax` sobre os logits para obter probabilidades.
+   - Retorna a classe com maior probabilidade e a confiança em porcentagem.
+
+Este design simples e direto permite fácil treinamento com os dados coletados, mantendo boa performance de reconhecimento.
+
+### Avaliação
+- Geração de relatório detalhado via `sklearn.classification_report`.
+- Matriz de confusão plotada e salva como `confusion_matrix.png`.

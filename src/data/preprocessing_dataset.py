@@ -4,8 +4,8 @@ import gc
 import multiprocessing
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
-from src.preprocessing import PreprocessModule
-from src.config import config
+from src.face.preprocessing import PreprocessModule
+from src.utils.config import config
 
 # Multiprocessing setup for preprocessing
 segmenter_pm = None

@@ -3,6 +3,8 @@ import os
 import re  # for extracting sequence numbers
 import numpy as np
 from insightface.app import FaceAnalysis
+import torch
+from src.utils.config import config
 # from src.preprocessing import preprocess_face  # Not used anymore
 
 def initialize_face_analyzer():
@@ -15,7 +17,9 @@ def initialize_face_analyzer():
         model_dir = "models/insightface"  # Still used for root, but don't check existence
         app = FaceAnalysis(name="buffalo_s", root=os.path.dirname(model_dir), 
                           allowed_modules=['detection', 'landmark_2d_106'])
-        app.prepare(ctx_id=0, det_size=(640, 640))  # Use GPU if available (ctx_id=0)
+        # Choose GPU if available, else CPU
+        ctx_id = 0 if torch.cuda.is_available() else -1
+        app.prepare(ctx_id=ctx_id, det_size=(640, 640))
         print("InsightFace model loaded successfully!")
         return app
     except Exception as e:
@@ -183,8 +187,8 @@ def extract_face(frame, face):
     Returns:
         Cropped face image centered around the nose (128x128)
     """
-    # Use the center crop function to center around nose
-    target_size = (128, 128)  # Fixed size for consistency
+    # Get target size from config for consistency
+    target_size = tuple(config.get('image_processing.target_size', [128, 128]))
     centered_face = center_crop_around_nose(frame, face, crop_size=target_size)
     return centered_face
 

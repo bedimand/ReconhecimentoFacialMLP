@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
-from src.config import config
+from src.utils.config import config
 
 def to_rgb(img):
     """Convert image to RGB if it isn't already"""
