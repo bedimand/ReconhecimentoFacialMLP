@@ -179,7 +179,7 @@ Este design simples e direto permite fácil treinamento com os dados coletados, 
 
 #### Resultados
 
-![Matriz de Confusão](confusion_matrix.png)
+![Matriz de Confusão](assets/confusion_matrix.png)
 
 - **Overall accuracy**: 99.33%
 - **Detalhes do relatório de classificação**:
