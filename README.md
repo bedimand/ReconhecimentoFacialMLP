@@ -176,8 +176,76 @@ A parte central do sistema é a Rede Neural Multicamadas (MLP) definida em `src/
 Este design simples e direto permite fácil treinamento com os dados coletados, mantendo boa performance de reconhecimento.
 
 ### Avaliação
-- Geração de relatório detalhado via `sklearn.classification_report`.
-- Matriz de confusão plotada e salva como `confusion_matrix.png`.
+
+#### Resultados
+
+![Matriz de Confusão](confusion_matrix.png)
+
+- **Overall accuracy**: 99.33%
+- **Detalhes do relatório de classificação**:
+
+```
+              precision    recall  f1-score   support
+
+  anabeatriz       0.97      0.93      0.95       112
+    anapaula       0.94      1.00      0.97       130
+    bernardo       0.87      0.96      0.91       376
+       livia       0.89      0.97      0.93       147
+     unknown       1.00      0.99      1.00     14573
+
+    accuracy                           0.99     15338
+   macro avg       0.93      0.97      0.95     15338
+weighted avg       0.99      0.99      0.99     15338
+```
+
+- **Acurácia por classe**:
+  - anabeatriz: 92.86%
+  - anapaula: 100.00%
+  - bernardo: 96.28%
+  - livia: 96.60%
+  - unknown: 99.48%
+
+#### Configurações Utilizadas
+
+As configurações foram carregadas de `config.yaml`:
+
+```yaml
+system:
+  python_version: "3.11+"
+  device: "cuda"
+
+face_detection:
+  model_name: "buffalo_s"
+  det_size: [640, 640]
+  margin: 20
+
+image_processing:
+  target_size: [128, 128]
+  normalization:
+    mean: [0.5]
+    std: [0.5]
+
+training:
+  num_epochs: 50
+  batch_size: 32
+  learning_rate: 0.001
+  seed: 42
+  validation_split: 0.1
+  early_stopping:
+    enabled: true
+    patience: 7
+
+recognition:
+  confidence_threshold: 30.0
+  looking_detection:
+    enabled: true
+    threshold: 0.75
+
+camera:
+  width: 1280
+  height: 720
+  fps: 30
+```
 
 ### Fluxo de Processamento em Tempo Real
 

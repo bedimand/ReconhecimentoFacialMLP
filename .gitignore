@@ -177,7 +177,6 @@ detected_faces/
 models/
 dataset_preprocessed/
 dataset_preprocessed_rmbg/
-confusion_matrix.png
 Humans/
 modelito/
 modeloeu
